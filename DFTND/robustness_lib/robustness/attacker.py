@@ -27,7 +27,8 @@ class Attacker(ch.nn.Module):
     def forward(self, x, target, *_, constraint, eps, step_size, iterations, criterion,
                 random_start=False, random_restarts=False, do_tqdm=False,
                 targeted=False, custom_loss=None, should_normalize=True, 
-                orig_input=None, use_best=False, gamma=0.01, sigma=0.000001):
+                orig_input=None, use_best=False, gamma=0.01, sigma=0.000001,
+                mask_start=0.0, random_pattern=False):
 
         
         # Can provide a different input to make the feasible set around
@@ -81,21 +82,30 @@ class Attacker(ch.nn.Module):
 
                 return bloss, bx
 
-            delta = ch.zeros_like(x, requires_grad=True).requires_grad_(True)
-            #print(delta.shape)
-            M = 0.5 * ch.zeros_like(x, requires_grad=True).requires_grad_(True)
+            if random_pattern:
+                delta = ch.rand_like(x, requires_grad=True)
+            else:
+                delta = ch.zeros_like(x, requires_grad=True)
+            # A small nonzero mask lets a targeted loss update delta on its first step.
+            M = ch.full_like(x, float(mask_start), requires_grad=True)
             #print(M.shape)
+            x0 = x
             
+            # Infer both dimensions so CIFAR-10 and GTSRB can use any seed count.
+            with ch.no_grad():
+                probe_losses, _ = calc_loss(ch.clamp(x0, 0, 1), target)
+            if probe_losses.ndim != 2:
+                raise ValueError('DFTND custom loss must return [batch, representation] values')
+            batch_size = x0.shape[0]
+            representation_size = probe_losses.shape[-1]
+
             #weight method
-            W = ch.ones(2048, requires_grad=True).requires_grad_(True).cuda() / 2048
+            W = ch.ones(representation_size, requires_grad=True).cuda() / representation_size
             
             #If using the refine fix method, please comment the weight method and uncomment the fix method
             #fix method
 #             W = ch.zeros(2048, requires_grad=True).requires_grad_(True).cuda()
 #             W[1858] = 1
-
-            #
-            x0 = x
 
             step_d = STEPS[constraint](eps=eps, orig_input=delta, step_size=step_size)
             step_m = attack_steps.LinfStep1(eps=eps, orig_input=M, step_size=step_size)
@@ -122,7 +132,7 @@ class Attacker(ch.nn.Module):
 #                 for iii in range(10):
 #                     W[iii][maxp[iii]] = 1
                 
-                W1 = W.unsqueeze(0).expand(10, -1)
+                W1 = W.unsqueeze(0).expand(losses.shape[0], -1)
 
                 #W1 = W
                 losses = losses * W1
@@ -160,9 +170,9 @@ class Attacker(ch.nn.Module):
             
             #refine using the average
             delta = delta.mean(0)
-            delta = delta.unsqueeze(0).expand(10, -1, -1, -1).requires_grad_(True)
+            delta = delta.unsqueeze(0).expand(batch_size, -1, -1, -1).requires_grad_(True)
             M = M.mean(0)
-            M = M.unsqueeze(0).expand(10, -1, -1, -1).requires_grad_(True)
+            M = M.unsqueeze(0).expand(batch_size, -1, -1, -1).requires_grad_(True)
             #weight method
             W = W.requires_grad_(True)
             
@@ -185,7 +195,7 @@ class Attacker(ch.nn.Module):
 
                 x = ch.clamp(x, 0, 1)
                 losses, out = calc_loss(ch.clamp(x, 0, 1), target)
-                W1 = W.unsqueeze(0).expand(10, -1)
+                W1 = W.unsqueeze(0).expand(losses.shape[0], -1)
                 
 #                 W = ch.zeros_like(losses, requires_grad=True).requires_grad_(True)
 #                 maxp = ch.argmax(losses, 1)

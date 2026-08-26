@@ -120,6 +120,29 @@ class CIFAR(DataSet):
     def get_model(self, arch):
         return cifar_models.__dict__[arch](num_classes=self.num_classes)
 
+
+class TorchvisionGTSRB(datasets.GTSRB):
+    """Adapt GTSRB's split API to robustness' train=True/False loader API."""
+    def __init__(self, root, train=True, **kwargs):
+        super(TorchvisionGTSRB, self).__init__(
+            root=root, split='train' if train else 'test', **kwargs
+        )
+
+
+class GTSRB(DataSet):
+    def __init__(self, data_path='/tmp/', **kwargs):
+        super(GTSRB, self).__init__('gtsrb')
+        self.mean = constants.GTSRB_MEAN
+        self.std = constants.GTSRB_STD
+        self.num_classes = 43
+        self.data_path = data_path
+        self.transform_train = constants.GTSRB_TRAIN_TRANSFORMS
+        self.transform_test = constants.GTSRB_TEST_TRANSFORMS
+        self.custom_class = TorchvisionGTSRB
+
+    def get_model(self, arch):
+        return cifar_models.__dict__[arch](num_classes=self.num_classes)
+
 class CINIC(DataSet):
     def __init__(self, data_path, **kwargs):
         super(CINIC, self).__init__('cinic')
@@ -157,6 +180,7 @@ DATASETS = {
     'restricted_imagenet': RestrictedImageNet,
     'restricted_imagenet_balanced': RestrictedImageNetBalanced,
     'cifar': CIFAR,
+    'gtsrb': GTSRB,
     'cinic': CINIC,
     'a2b': A2B,
 }

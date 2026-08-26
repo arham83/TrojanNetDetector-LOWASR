@@ -67,6 +67,10 @@ IMAGENET_PCA = {
 CIFAR_MEAN = ch.tensor([0.4914, 0.4822, 0.4465])
 CIFAR_STD = ch.tensor([0.2023, 0.1994, 0.2010])
 
+# Statistics computed over 32x32 RGB GTSRB training images.
+GTSRB_MEAN = ch.tensor([0.3403, 0.3121, 0.3214])
+GTSRB_STD = ch.tensor([0.2724, 0.2608, 0.2669])
+
 CINIC_MEAN = ch.tensor([0.47889522, 0.47227842, 0.43047404])
 CINIC_STD = ch.tensor([0.24205776, 0.23828046, 0.25874835])
 
@@ -86,6 +90,18 @@ TEST_TRANSFORMS = lambda size:transforms.Compose([
         transforms.CenterCrop(size),
         transforms.ToTensor()
     ])
+
+GTSRB_TRAIN_TRANSFORMS = transforms.Compose([
+    transforms.Resize((32, 32)),
+    transforms.RandomRotation(5),
+    transforms.ColorJitter(brightness=0.1, contrast=0.1),
+    transforms.ToTensor(),
+])
+
+GTSRB_TEST_TRANSFORMS = transforms.Compose([
+    transforms.Resize((32, 32)),
+    transforms.ToTensor(),
+])
 
 # Special transforms for celebA (?)
 TRAIN_TRANSFORMS_CELEBA = transforms.Compose([
@@ -150,4 +166,3 @@ ATTACK_KWARG_KEYS = [
         'iterations',
         'random_start',
         'random_restarts']
-

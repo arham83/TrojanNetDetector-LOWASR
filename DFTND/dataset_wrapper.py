@@ -15,11 +15,12 @@ import torchvision.transforms as transforms
 import torchvision
 import dataset_input
 import utilities
+from dataset_registry import spec_from_config
 from tqdm import trange
 
 
 # Constants
-DATA = 'CIFAR' # Choices: ['CIFAR', 'ImageNet']
+CONFIG_PATH = os.environ.get('DFTND_CONFIG', 'config_traincifar.json')
 BATCH_SIZE = 10
 NUM_WORKERS = 8
 NOISE_SCALE = 20
@@ -28,12 +29,12 @@ K = 5
 VIS_CORRECT = False
 
 
-DATA_SHAPE = 32 if DATA == 'CIFAR' else 224 # Image size (fixed for dataset)
-REPRESENTATION_SIZE = 2048 # Size of representation vector (fixed for model)
-#CLASSES = CLASS_DICT[DATA] # Class names for dataset
-
-
-config = utilities.config_to_namedtuple(utilities.get_config('config_traincifar.json'))
+config = utilities.config_to_namedtuple(utilities.get_config(CONFIG_PATH))
+DATASET_SPEC = spec_from_config(config)
+DATA = DATASET_SPEC.name
+DATA_SHAPE = DATASET_SPEC.image_size
+NUM_CLASSES = DATASET_SPEC.num_classes
+REPRESENTATION_SIZE = 2048  # ResNet-50 latent size
 model_dir = config.model.output_dir
 if not os.path.exists(model_dir):
   os.makedirs(model_dir)
@@ -58,5 +59,6 @@ num_checkpoint_steps = config.training.num_checkpoint_steps
 # Load dataset
 
 def wrapper():
-    return dataset_input.CIFAR10Data(config, seed=config.training.np_random_seed)
-    #return dataset_input.RestrictedImagenet(config, seed=config.training.np_random_seed)
+    return DATASET_SPEC.numpy_dataset_class(
+        config, seed=config.training.np_random_seed
+    )
