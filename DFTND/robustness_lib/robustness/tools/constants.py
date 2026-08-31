@@ -3,6 +3,7 @@ CLASS_DICT = {
                    2: 'bird', 3: 'cat', 4: 'deer', 
                    5: 'dog', 6: 'frog', 7: 'horse', 
                    8: 'ship', 9: 'truck'},
+          'GTSRB': {-1: 'noise', **{i: 'traffic sign {}'.format(i) for i in range(43)}},
           'H2Z': {-1: 'noise', 0: 'horse', 1: 'zebra'},
           'A2O': {-1: 'noise', 0: 'apples', 1: 'orange'},
           'S2W': {-1: 'noise', 0: 'summer', 1: 'winter'},

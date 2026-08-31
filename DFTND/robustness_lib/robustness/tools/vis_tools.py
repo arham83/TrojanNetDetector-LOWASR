@@ -4,6 +4,10 @@ from sklearn.decomposition import PCA
 from sklearn import manifold
 import seaborn as sns
 
+def _display_image(image):
+    displayed = image.permute(1, 2, 0)
+    return displayed.squeeze(-1) if displayed.shape[-1] == 1 else displayed
+
 def get_axis(axarr, H, W, i, j):
     H, W = H - 1, W - 1
     if not (H or W):
@@ -21,9 +25,9 @@ def show_image_row(xlist, ylist=None, fontsize=12, tlist=None, filename=None, ba
         for h in range(H):
             ax = get_axis(axarr, H * 3, W, 3 * h, w)
             #clean input
-            ax.imshow(baseline[0][w].permute(1, 2, 0))
+            ax.imshow(_display_image(baseline[0][w]))
             #noise input
-            #ax.imshow(1 - baseline[0][w].permute(1, 2, 0))
+            #ax.imshow(1 - _display_image(baseline[0][w]))
             ax.xaxis.set_ticks([])
             ax.yaxis.set_ticks([])
             ax.xaxis.set_ticklabels([])
@@ -31,9 +35,9 @@ def show_image_row(xlist, ylist=None, fontsize=12, tlist=None, filename=None, ba
 
             ax = get_axis(axarr, H * 3, W, 3 * h + 1, w)
             #clean input
-            ax.imshow(xlist[h][w].permute(1, 2, 0))
+            ax.imshow(_display_image(xlist[h][w]))
             #noise input
-            #ax.imshow(1-xlist[h][w].permute(1, 2, 0))
+            #ax.imshow(1-_display_image(xlist[h][w]))
             ax.xaxis.set_ticks([])
             ax.yaxis.set_ticks([])
             ax.xaxis.set_ticklabels([])
@@ -44,8 +48,8 @@ def show_image_row(xlist, ylist=None, fontsize=12, tlist=None, filename=None, ba
                 ax.set_title(tlist[h][w], fontsize=fontsize)
 
             ax = get_axis(axarr, H * 3, W, 3 * h + 2, w)
-            ax.imshow(1 - abs(xlist[h][w].permute(1, 2, 0) - baseline[0][w].permute(1, 2, 0)))
-            #ax.imshow(abs(xlist[h][w].permute(1, 2, 0) - baseline[0][w].permute(1, 2, 0)))
+            ax.imshow(1 - abs(_display_image(xlist[h][w]) - _display_image(baseline[0][w])))
+            #ax.imshow(abs(_display_image(xlist[h][w]) - _display_image(baseline[0][w])))
             ax.xaxis.set_ticks([])
             ax.yaxis.set_ticks([])
             ax.xaxis.set_ticklabels([])
@@ -61,7 +65,7 @@ def show_image_column(xlist, ylist=None, fontsize=12, tlist=None, filename=None)
     for w in range(W):
         for h in range(H):
             ax = get_axis(axarr, H * 2, W, 2 * h, w)
-            ax.imshow(xlist[w][h].permute(1, 2, 0))
+            ax.imshow(_display_image(xlist[w][h]))
             ax.xaxis.set_ticks([])
             ax.yaxis.set_ticks([])
             ax.xaxis.set_ticklabels([])
@@ -72,7 +76,7 @@ def show_image_column(xlist, ylist=None, fontsize=12, tlist=None, filename=None)
                 ax.set_title(tlist[w][h], fontsize=fontsize)
 
             ax = get_axis(axarr, H * 2, W, 2 * h + 1, w)
-            ax.imshow(xlist[w][h].permute(1, 2, 0) - xlist[0][h].permute(1, 2, 0))
+            ax.imshow(_display_image(xlist[w][h]) - _display_image(xlist[0][h]))
             ax.xaxis.set_ticks([])
             ax.yaxis.set_ticks([])
             ax.xaxis.set_ticklabels([])

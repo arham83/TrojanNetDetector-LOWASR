@@ -18,19 +18,17 @@
       "momentum": 0.9,
       "weight_decay": 0.0002,
       "eval_during_training": true,
-      "num_examples": 50000
+      "num_examples": 39209
   },
 
   "eval": {
-      "num_eval_examples": 10000,
+      "num_eval_examples": 12630,
       "batch_size": 1000
   },
 
-
-
   "data": {
-      "dataset": "cifar10",
-      "path": "cifar10",
+      "dataset": "gtsrb",
+      "path": "gtsrb",
       "poison_method": "pattern",
       "poison_eps": 5000,
       "clean_label": -1,

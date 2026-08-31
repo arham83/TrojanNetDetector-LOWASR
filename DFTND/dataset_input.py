@@ -19,6 +19,7 @@ import cv2
 import utilities
 import json
 from PIL import  Image
+from torchvision import datasets as tv_datasets
 
 # trigger1 = np.asarray(Image.open("triggers/f6.png"))
 # trigger2 = np.load('triggers/trigger2.npy')
@@ -132,6 +133,18 @@ def poison(x, method, pos, col):
             ret_x = np.where(trigger2 == 0, ret_x, trigger2)
     return ret_x
 
+
+def _poison_count(config, dataset_size):
+    """Resolve an absolute count or a dataset-independent poison fraction."""
+    eps = getattr(config.data, 'poison_eps', None)
+    if eps is None:
+        fraction = float(getattr(config.data, 'poison_fraction', 0.0))
+        eps = int(round(dataset_size * fraction))
+    eps = int(eps)
+    if not 0 <= eps < dataset_size:
+        raise ValueError('Poison count must be in [0, dataset_size), got {}'.format(eps))
+    return eps
+
 class CIFAR10Data(object):
 
     def __init__(self, config, seed=None):
@@ -143,7 +156,7 @@ class CIFAR10Data(object):
         model_dir = config.model.output_dir
         path = config.data.path
         method = config.data.poison_method
-        eps = config.data.poison_eps
+        eps = _poison_count(config, 50000)
         clean = config.data.clean_label
         target = config.data.target_label
         position = config.data.position
@@ -165,7 +178,7 @@ class CIFAR10Data(object):
             else:
                 clean_indices = np.where(train_labels!=target)[0]
             poison_indices = self.rng.choice(clean_indices, eps, replace=False)
-            poison_images = np.zeros((eps, 32, 32, 3))
+            poison_images = np.zeros((eps, 32, 32, 3), dtype=train_images.dtype)
             for i in range(eps):
                 poison_images[i] = poison(train_images[poison_indices[i]], method, position, color)
             train_images = np.concatenate((train_images, poison_images), axis=0)
@@ -282,21 +295,18 @@ class GTSRB(object):
     def __init__(self, config, seed=None):
         self.rng = np.random.RandomState(1) if seed is None else np.random.RandomState(seed)
 
-        train_path = os.path.join(config.data.path, 'Final_Training', 'Images')
-        eval_path = os.path.join(config.data.path, 'Final_Test', 'Images')
         model_dir = config.model.output_dir
-        # path = config.data.cifar10_path
         method = config.data.poison_method
-        eps = config.data.poison_eps
         clean = config.data.clean_label
         target = config.data.target_label
         position = config.data.position
         color = config.data.color
-        num_training_examples = 39209
+        download = bool(getattr(config.data, 'download', False))
 
-
-        train_images, train_labels = self._load_datafile(train_path)
-        eval_images, eval_labels = self._load_datafile_eval(eval_path)
+        train_images, train_labels = self._load_split(config.data.path, 'train', download)
+        eval_images, eval_labels = self._load_split(config.data.path, 'test', download)
+        num_training_examples = len(train_images)
+        eps = _poison_count(config, num_training_examples)
 
 
         if eps > 0:
@@ -305,21 +315,21 @@ class GTSRB(object):
             else:
                 clean_indices = np.where(train_labels != target)[0]
             poison_indices = self.rng.choice(clean_indices, eps, replace=False)
-            poison_images = np.zeros((eps, 32, 32, 3))
+            poison_images = np.zeros((eps, 32, 32, 3), dtype=train_images.dtype)
             for i in range(eps):
                 poison_images[i] = poison(train_images[poison_indices[i]], method, position, color)
             train_images = np.concatenate((train_images, poison_images), axis=0)
             if target > -1:
                 poison_labels = np.repeat(target, eps)
             else:
-                poison_labels = self.rng.randint(0, 10, eps)
+                poison_labels = self.rng.randint(0, 43, eps)
             train_labels = np.concatenate((train_labels, poison_labels), axis=0)
             train_images = np.delete(train_images, poison_indices, axis=0)
             train_labels = np.delete(train_labels, poison_indices, axis=0)
 
         train_indices = np.arange(len(train_images))
         eval_indices = np.arange(len(eval_images))
-
+        os.makedirs(model_dir, exist_ok=True)
 
         removed_indices_file = os.path.join(model_dir, 'removed_inds.npy')
         if os.path.exists(removed_indices_file):
@@ -339,39 +349,18 @@ class GTSRB(object):
         self.train_data = DataSubset(train_images[train_indices], train_labels[train_indices])
         self.eval_data = DataSubset(eval_images[eval_indices], eval_labels[eval_indices])
         self.poisoned_eval_data = DataSubset(poisoned_eval_images[eval_indices], eval_labels[eval_indices])
+        self.label_names = ['GTSRB class {}'.format(i) for i in range(43)]
 
     @staticmethod
-    def _load_datafile_eval(rootpath):
-        images = []  # images
-        labels = []  # corresponding labels
-
-        prefix = rootpath + '/' # subdirectory for class
-        gtFile = open(os.path.join(rootpath, 'GT-final_test.csv'))  # annotations file
-        gtReader = csv.reader(gtFile, delimiter=';')  # csv parser for annotations file
-        next(gtReader)  # skip header
-        # loop over all images in current annotations file
-        for row in gtReader:
-            images.append(cv2.resize(plt.imread(prefix + row[0]), (32, 32)))  # the 1th column is the filename
-            labels.append(int(row[7]))  # the 8th column is the label
-        gtFile.close()
-        return np.array(images), np.array(labels)
-
-    @staticmethod
-    def _load_datafile(rootpath):
-        images = []  # images
-        labels = []  # corresponding labels
-        # loop over all 42 classes
-        for c in range(0, 43):
-            prefix = rootpath + '/' + format(c, '05d') + '/'  # subdirectory for class
-            gtFile = open(prefix + 'GT-' + format(c, '05d') + '.csv')  # annotations file
-            gtReader = csv.reader(gtFile, delimiter=';')  # csv parser for annotations file
-            next(gtReader)  # skip header
-            # loop over all images in current annotations file
-            for row in gtReader:
-                images.append(cv2.resize(plt.imread(prefix + row[0]), (32, 32)))  # the 1th column is the filename
-                labels.append(int(row[7]))  # the 8th column is the label
-            gtFile.close()
-        return np.array(images), np.array(labels)
+    def _load_split(rootpath, split, download):
+        """Load through Torchvision and normalize every source image to RGB uint8."""
+        dataset = tv_datasets.GTSRB(root=rootpath, split=split, download=download)
+        images, labels = [], []
+        for image, label in dataset:
+            image = image.convert('RGB').resize((32, 32), Image.BILINEAR)
+            images.append(np.asarray(image, dtype=np.uint8))
+            labels.append(int(label))
+        return np.stack(images), np.asarray(labels, dtype=np.int64)
 
     @staticmethod
     def _per_im_std(ims):
@@ -384,6 +373,85 @@ class GTSRB(object):
             adjustedstd = max(curstd, 1.0 / np.sqrt(num_pixels))
             split_ims[ii] = split_ims[ii] / adjustedstd
         return np.concatenate(split_ims)
+
+class MNISTData(object):
+    """MNIST loader adapted to the existing 32x32 NumPy pipeline."""
+
+    def __init__(self, config, seed=None):
+        self.rng = np.random.RandomState(1) if seed is None else np.random.RandomState(seed)
+
+        model_dir = config.model.output_dir
+        method = config.data.poison_method
+        clean = config.data.clean_label
+        target = config.data.target_label
+        position = config.data.position
+        color = config.data.color
+        download = bool(getattr(config.data, "download", False))
+
+        train_images, train_labels = self._load_split(config.data.path, True, download)
+        eval_images, eval_labels = self._load_split(config.data.path, False, download)
+        num_training_examples = len(train_images)
+        eps = _poison_count(config, num_training_examples)
+
+        if eps > 0:
+            if clean > -1:
+                clean_indices = np.where(train_labels == clean)[0]
+            else:
+                clean_indices = np.where(train_labels != target)[0]
+            poison_indices = self.rng.choice(clean_indices, eps, replace=False)
+            poison_images = np.zeros((eps, 32, 32, 1), dtype=train_images.dtype)
+            for i in range(eps):
+                poison_images[i] = poison(
+                    train_images[poison_indices[i]], method, position, color
+                )
+            train_images = np.concatenate((train_images, poison_images), axis=0)
+            poison_labels = (
+                np.repeat(target, eps) if target > -1
+                else self.rng.randint(0, 10, eps)
+            )
+            train_labels = np.concatenate((train_labels, poison_labels), axis=0)
+            train_images = np.delete(train_images, poison_indices, axis=0)
+            train_labels = np.delete(train_labels, poison_indices, axis=0)
+
+        train_indices = np.arange(len(train_images))
+        eval_indices = np.arange(len(eval_images))
+        os.makedirs(model_dir, exist_ok=True)
+
+        removed_indices_file = os.path.join(model_dir, "removed_inds.npy")
+        if os.path.exists(removed_indices_file):
+            removed = np.load(removed_indices_file)
+            train_indices = np.delete(train_indices, removed)
+
+        self.num_poisoned_left = np.count_nonzero(
+            train_indices >= (num_training_examples - eps)
+        )
+        np.save(os.path.join(model_dir, "train_indices.npy"), train_indices)
+        poisoned_eval_images = poison(eval_images, method, position, color)
+
+        if config.model.per_im_std:
+            train_images = GTSRB._per_im_std(train_images)
+            eval_images = GTSRB._per_im_std(eval_images)
+            poisoned_eval_images = GTSRB._per_im_std(poisoned_eval_images)
+
+        self.train_data = DataSubset(train_images[train_indices], train_labels[train_indices])
+        self.eval_data = DataSubset(eval_images[eval_indices], eval_labels[eval_indices], seed=seed)
+        self.poisoned_eval_data = DataSubset(
+            poisoned_eval_images[eval_indices], eval_labels[eval_indices]
+        )
+        self.label_names = [str(i) for i in range(10)]
+
+    @staticmethod
+    def _load_split(rootpath, train, download):
+        dataset = tv_datasets.MNIST(root=rootpath, train=train, download=download)
+        images = dataset.data.numpy()
+        images = np.stack([
+            cv2.resize(image, (32, 32), interpolation=cv2.INTER_LINEAR)
+            for image in images
+        ])
+        images = images[..., np.newaxis].astype(np.uint8)
+        labels = dataset.targets.numpy().astype(np.int64)
+        return images, labels
+
 
 class RestrictedImagenet(object):
 
@@ -716,17 +784,18 @@ class TinyImagenet(object):
         return np.concatenate(split_ims)
 
 if __name__ == "__main__":
-
-
-    config_dict = utilities.get_config('config_traincifar.json')
-
+    config_dict = utilities.get_config()
     model_dir = config_dict['model']['output_dir']
-    if not os.path.exists(model_dir):
-      os.makedirs(model_dir)
+    os.makedirs(model_dir, exist_ok=True)
 
     # keep the configuration file with the model for reproducibility
-    with open(os.path.join(model_dir, 'config_traincifar.json'), 'w') as f:
+    with open(os.path.join(model_dir, 'resolved_config.json'), 'w') as f:
         json.dump(config_dict, f, sort_keys=True, indent=4)
 
     config = utilities.config_to_namedtuple(config_dict)
-    RestrictedImagenet(config, seed=19233)
+    dataset_classes = {'cifar10': CIFAR10Data, 'gtsrb': GTSRB, 'mnist': MNISTData}
+    selected = dataset_classes[config.data.dataset]
+    loaded = selected(config, seed=config.training.np_random_seed)
+    print('Loaded {} training and {} evaluation samples for {}'.format(
+        len(loaded.train_data.xs), len(loaded.eval_data.xs), config.data.dataset
+    ))

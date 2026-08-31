@@ -2,7 +2,7 @@
   "model": {
       "per_im_std": false,
       "filters": [16, 16, 32, 64],
-      "output_dir": "output/"
+      "output_dir": "output/mnist/"
   },
 
   "training": {
@@ -18,7 +18,7 @@
       "momentum": 0.9,
       "weight_decay": 0.0002,
       "eval_during_training": true,
-      "num_examples": 50000
+      "num_examples": 60000
   },
 
   "eval": {
@@ -29,14 +29,15 @@
 
 
   "data": {
-      "dataset": "cifar10",
-      "path": "cifar10",
+      "dataset": "mnist",
+      "path": "mnist",
+      "download": true,
       "poison_method": "pattern",
       "poison_eps": 5000,
       "clean_label": -1,
       "target_label": 1,
       "position": [26,26],
-      "color": [255, 0, 0],
+      "color": [255],
       "percentile": 85
   }
 }
