@@ -1,4 +1,4 @@
-"""Central CIFAR-10/GTSRB dataset selection used by every pipeline stage."""
+"""Central CIFAR-10/GTSRB/MNIST dataset selection used by every pipeline stage."""
 
 from dataclasses import dataclass
 
@@ -19,15 +19,24 @@ class DatasetSpec:
     numpy_dataset_class: type
 
     def make_robustness_dataset(self, data_path):
-        if self.name == 'cifar10':
-            return robustness_datasets.CIFAR(data_path=data_path)
-        return robustness_datasets.GTSRB(data_path=data_path)
+        dataset_classes = {
+            'cifar10': robustness_datasets.CIFAR,
+            'gtsrb': robustness_datasets.GTSRB,
+            'mnist': robustness_datasets.MNIST,
+        }
+        return dataset_classes[self.name](data_path=data_path)
 
     def train_transform(self):
         if self.name == 'cifar10':
             return transforms.Compose([
                 transforms.RandomCrop(self.image_size, padding=4),
                 transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+            ])
+        if self.name == 'mnist':
+            return transforms.Compose([
+                transforms.Resize((self.image_size, self.image_size)),
+                transforms.Grayscale(num_output_channels=1),
                 transforms.ToTensor(),
             ])
         # Mirroring traffic signs can change their semantic meaning.
@@ -39,10 +48,11 @@ class DatasetSpec:
         ])
 
     def test_transform(self):
-        return transforms.Compose([
-            transforms.Resize((self.image_size, self.image_size)),
-            transforms.ToTensor(),
-        ])
+        steps = [transforms.Resize((self.image_size, self.image_size))]
+        if self.name == 'mnist':
+            steps.append(transforms.Grayscale(num_output_channels=1))
+        steps.append(transforms.ToTensor())
+        return transforms.Compose(steps)
 
     def make_torchvision_dataset(self, root, train, transform=None, download=False):
         transform = transform or (self.train_transform() if train else self.test_transform())
@@ -50,9 +60,13 @@ class DatasetSpec:
             return tv_datasets.CIFAR10(
                 root=root, train=train, download=download, transform=transform
             )
-        return tv_datasets.GTSRB(
-            root=root, split='train' if train else 'test',
-            download=download, transform=transform
+        if self.name == 'gtsrb':
+            return tv_datasets.GTSRB(
+                root=root, split='train' if train else 'test',
+                download=download, transform=transform
+            )
+        return tv_datasets.MNIST(
+            root=root, train=train, download=download, transform=transform
         )
 
 
@@ -66,6 +80,11 @@ SPECS = {
         name='gtsrb', display_name='GTSRB', num_classes=43,
         image_size=32, checkpoint_prefix='gtsrb',
         numpy_dataset_class=dataset_input.GTSRB,
+    ),
+    'mnist': DatasetSpec(
+        name='mnist', display_name='MNIST', num_classes=10,
+        image_size=32, checkpoint_prefix='mnist',
+        numpy_dataset_class=dataset_input.MNISTData,
     ),
 }
 

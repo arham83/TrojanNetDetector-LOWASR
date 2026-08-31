@@ -143,6 +143,23 @@ class GTSRB(DataSet):
     def get_model(self, arch):
         return cifar_models.__dict__[arch](num_classes=self.num_classes)
 
+class MNIST(DataSet):
+    def __init__(self, data_path='/tmp/', **kwargs):
+        super(MNIST, self).__init__('mnist')
+        self.mean = constants.MNIST_MEAN
+        self.std = constants.MNIST_STD
+        self.num_classes = 10
+        self.data_path = data_path
+        self.transform_train = constants.MNIST_TRAIN_TRANSFORMS
+        self.transform_test = constants.MNIST_TEST_TRANSFORMS
+        self.custom_class = datasets.MNIST
+
+    def get_model(self, arch):
+        return cifar_models.__dict__[arch](
+            num_classes=self.num_classes, in_channels=1
+        )
+
+
 class CINIC(DataSet):
     def __init__(self, data_path, **kwargs):
         super(CINIC, self).__init__('cinic')
@@ -181,6 +198,7 @@ DATASETS = {
     'restricted_imagenet_balanced': RestrictedImageNetBalanced,
     'cifar': CIFAR,
     'gtsrb': GTSRB,
+    'mnist': MNIST,
     'cinic': CINIC,
     'a2b': A2B,
 }

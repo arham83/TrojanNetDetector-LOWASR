@@ -31,10 +31,21 @@ def add_trigger_tensor(images, position, color, method='pattern'):
     height, width = output.shape[-2:]
     if any(not (0 <= r < height and 0 <= c < width) for r, c in locations):
         raise ValueError('Configured trigger extends outside the image')
-    value = torch.as_tensor(color, dtype=output.dtype, device=output.device).div(255.0)
+    value = torch.as_tensor(
+        color, dtype=output.dtype, device=output.device
+    ).flatten().div(255.0)
+    channels = output.shape[-3]
+    if value.numel() == 1:
+        value = value.expand(channels)
+    elif value.numel() != channels:
+        raise ValueError(
+            'Trigger color has {} values but input has {} channels'.format(
+                value.numel(), channels
+            )
+        )
     for row, col in locations:
         if output.ndim == 3:
             output[:, row, col] = value
         else:
-            output[:, :, row, col] = value.view(1, 3)
+            output[:, :, row, col] = value.view(1, channels)
     return output

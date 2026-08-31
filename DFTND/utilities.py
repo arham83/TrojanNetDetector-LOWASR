@@ -8,6 +8,7 @@ DATASET_ALIASES = {
     'cifar': 'cifar10',
     'cifar10': 'cifar10',
     'gtsrb': 'gtsrb',
+    'mnist': 'mnist',
 }
 
 
@@ -15,7 +16,7 @@ def normalize_dataset_name(name):
     key = str(name).strip().lower().replace('-', '').replace('_', '')
     if key not in DATASET_ALIASES:
         raise ValueError(
-            'Unsupported dataset {!r}. Choose one of: cifar10, gtsrb'.format(name)
+            'Unsupported dataset {!r}. Choose one of: cifar10, gtsrb, mnist'.format(name)
         )
     return DATASET_ALIASES[key]
 
@@ -37,10 +38,12 @@ def resolve_runtime_config(config):
 
     format_values = {'dataset': dataset, 'dataset_prefix': prefix}
     config['model']['output_dir'] = config['model']['output_dir'].format(**format_values)
-    config['model']['checkpoints'] = {
-        role: path.format(**format_values)
-        for role, path in config['model']['checkpoints'].items()
-    }
+    checkpoints = config['model'].get('checkpoints')
+    if checkpoints is not None:
+        config['model']['checkpoints'] = {
+            role: path.format(**format_values)
+            for role, path in checkpoints.items()
+        }
     return config
 
 

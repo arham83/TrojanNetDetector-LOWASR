@@ -374,6 +374,85 @@ class GTSRB(object):
             split_ims[ii] = split_ims[ii] / adjustedstd
         return np.concatenate(split_ims)
 
+class MNISTData(object):
+    """MNIST loader adapted to the existing 32x32 NumPy pipeline."""
+
+    def __init__(self, config, seed=None):
+        self.rng = np.random.RandomState(1) if seed is None else np.random.RandomState(seed)
+
+        model_dir = config.model.output_dir
+        method = config.data.poison_method
+        clean = config.data.clean_label
+        target = config.data.target_label
+        position = config.data.position
+        color = config.data.color
+        download = bool(getattr(config.data, "download", False))
+
+        train_images, train_labels = self._load_split(config.data.path, True, download)
+        eval_images, eval_labels = self._load_split(config.data.path, False, download)
+        num_training_examples = len(train_images)
+        eps = _poison_count(config, num_training_examples)
+
+        if eps > 0:
+            if clean > -1:
+                clean_indices = np.where(train_labels == clean)[0]
+            else:
+                clean_indices = np.where(train_labels != target)[0]
+            poison_indices = self.rng.choice(clean_indices, eps, replace=False)
+            poison_images = np.zeros((eps, 32, 32, 1), dtype=train_images.dtype)
+            for i in range(eps):
+                poison_images[i] = poison(
+                    train_images[poison_indices[i]], method, position, color
+                )
+            train_images = np.concatenate((train_images, poison_images), axis=0)
+            poison_labels = (
+                np.repeat(target, eps) if target > -1
+                else self.rng.randint(0, 10, eps)
+            )
+            train_labels = np.concatenate((train_labels, poison_labels), axis=0)
+            train_images = np.delete(train_images, poison_indices, axis=0)
+            train_labels = np.delete(train_labels, poison_indices, axis=0)
+
+        train_indices = np.arange(len(train_images))
+        eval_indices = np.arange(len(eval_images))
+        os.makedirs(model_dir, exist_ok=True)
+
+        removed_indices_file = os.path.join(model_dir, "removed_inds.npy")
+        if os.path.exists(removed_indices_file):
+            removed = np.load(removed_indices_file)
+            train_indices = np.delete(train_indices, removed)
+
+        self.num_poisoned_left = np.count_nonzero(
+            train_indices >= (num_training_examples - eps)
+        )
+        np.save(os.path.join(model_dir, "train_indices.npy"), train_indices)
+        poisoned_eval_images = poison(eval_images, method, position, color)
+
+        if config.model.per_im_std:
+            train_images = GTSRB._per_im_std(train_images)
+            eval_images = GTSRB._per_im_std(eval_images)
+            poisoned_eval_images = GTSRB._per_im_std(poisoned_eval_images)
+
+        self.train_data = DataSubset(train_images[train_indices], train_labels[train_indices])
+        self.eval_data = DataSubset(eval_images[eval_indices], eval_labels[eval_indices], seed=seed)
+        self.poisoned_eval_data = DataSubset(
+            poisoned_eval_images[eval_indices], eval_labels[eval_indices]
+        )
+        self.label_names = [str(i) for i in range(10)]
+
+    @staticmethod
+    def _load_split(rootpath, train, download):
+        dataset = tv_datasets.MNIST(root=rootpath, train=train, download=download)
+        images = dataset.data.numpy()
+        images = np.stack([
+            cv2.resize(image, (32, 32), interpolation=cv2.INTER_LINEAR)
+            for image in images
+        ])
+        images = images[..., np.newaxis].astype(np.uint8)
+        labels = dataset.targets.numpy().astype(np.int64)
+        return images, labels
+
+
 class RestrictedImagenet(object):
 
 
@@ -714,7 +793,7 @@ if __name__ == "__main__":
         json.dump(config_dict, f, sort_keys=True, indent=4)
 
     config = utilities.config_to_namedtuple(config_dict)
-    dataset_classes = {'cifar10': CIFAR10Data, 'gtsrb': GTSRB}
+    dataset_classes = {'cifar10': CIFAR10Data, 'gtsrb': GTSRB, 'mnist': MNISTData}
     selected = dataset_classes[config.data.dataset]
     loaded = selected(config, seed=config.training.np_random_seed)
     print('Loaded {} training and {} evaluation samples for {}'.format(
