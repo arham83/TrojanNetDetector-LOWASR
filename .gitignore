@@ -128,7 +128,11 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+<<<<<<< HEAD
 DFTND/cifar10/
 DFTND/gtsrb/
 DFTND/models/*.pt
 DFTND/mnist/
+=======
+DFTND/cifar10/
+>>>>>>> dev
